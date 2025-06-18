@@ -1,0 +1,7 @@
+rbergomi_model.py	Core model: forward variance curve generation, fractional Brownian motion (FBM), kernel construction.
+option_pricing.py	Monte Carlo simulation for option pricing using the rBergomi dynamics.
+brownian_utils.py	Shared and orthogonal Brownian motion sampling.
+market_preprocessing.py	Cleaning, filtering, and stratified sampling of market option data.
+vol_surface_plot.py	Smile plot and 3D forward variance surface plotting utilities.
+config.py	Stores model parameters: H, eta, rho, etc., for centralized control.
+main_runner.py	Entry point: end-to-end script combining all steps to calibrate, simulate, and visualize.
