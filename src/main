@@ -1,0 +1,178 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# In[1]:
+
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import yfinance as yf
+import pandas_datareader.data as web
+import os
+import regex as re
+from scipy.stats import norm
+from scipy.optimize import brentq
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+from matplotlib import cm
+from sklearn.linear_model import LinearRegression
+
+
+# In[39]:
+
+
+big_errors = []
+
+# Define maturity bands and pick one preferred DTE inside each
+available_dtes = [6, 7, 34, 37, 42, 61, 66, 70]
+
+dte_targets = {
+    'Short-term (5–15D)': (5, 15, 6),
+    'Medium-term (30–45D)': (30, 45, 35),
+    'Long-term (60–75D)': (60, 75, 65),
+}
+
+def update_dte_targets(dte_targets, available_dtes):
+    updated_targets = {}
+    for label, (dte_min, dte_max, dte_target) in dte_targets.items():
+        dtes_in_range = sorted([d for d in available_dtes if dte_min <= d <= dte_max])
+        if not dtes_in_range:
+            updated_targets[label] = (dte_min, dte_max, None)
+            continue
+
+        if dte_target in dtes_in_range:
+            updated_targets[label] = (dte_min, dte_max, dte_target)
+        else:
+            higher = [d for d in dtes_in_range if d > dte_target]
+            chosen = higher[0] if higher else dtes_in_range[-1]
+            updated_targets[label] = (dte_min, dte_max, chosen)
+    return updated_targets
+
+# Update the dictionary in-place
+dte_targets = update_dte_targets(dte_targets, available_dtes)
+skew_results = []
+for i in range(20,30):
+    date_i = dates[i]
+    sampled_options = sampled_options_all_days[sampled_options_all_days["date"] == date_i]
+    options_df = sampled_options.copy()
+
+    epsilon_0 = 0.02
+
+    # Simulate forward variance & Brownian paths
+    fwd = generate_forward_variance_curves(options_df, H, eta, epsilon_0, M=5000, plot=False)
+    bm1 = get_shared_BM_from_dataframe(options_df, M=5000)
+    bm2 = get_shared_BM_from_dataframe(options_df, M=5000)
+    
+
+
+    # Model pricing
+    options_sample = pricing_options_dataframe(
+        options_df=options_df,
+        fwd_var_dict=fwd,
+        shared_W_dict=bm1,
+        shared_W_perp_dict=bm2,
+        r=0.035,
+        rho=-0.8,
+        option_type='put'
+    )
+        # === Term Structure of Skew Collection ===
+    for dte in sorted(options_sample["DTE"].unique()):
+        df_dte = options_sample[
+            options_sample["DTE"].between(dte - 1, dte + 1)
+        ].copy()
+
+        # Use only puts and relevant moneyness
+        valid_buckets = ["Deep ITM", "ITM", "ATM-ish"]
+        filtered_df = df_dte[
+            (df_dte["moneyness_bucket"].isin(valid_buckets)) &
+            (df_dte["cp_flag"] == 'P')
+        ].copy()
+
+        valid = filtered_df[["log_moneyness", "market_iv"]].dropna()
+
+        if len(valid) >= 5:
+            X = valid["log_moneyness"].values.reshape(-1, 1)
+            y = valid["market_iv"].values
+            reg = LinearRegression().fit(X, y)
+            skew_slope = reg.coef_[0]
+            skew_results.append((dte, skew_slope, date_i))
+
+
+    for label, (dte_min, dte_max, target_dte) in dte_targets.items():
+        # Get options within ±1 day of the target DTE
+        df_dte = options_sample[
+            (options_sample["DTE"] >= dte_min) &
+            (options_sample["DTE"] <= dte_max) &
+            (options_sample["DTE"].between(target_dte - 1, target_dte + 1))
+        ].copy()
+
+        # Filter relevant moneyness buckets
+        valid_buckets = ["Deep ITM", "ITM", "ATM-ish"]
+        filtered_df = df_dte[df_dte["moneyness_bucket"].isin(valid_buckets)].copy()
+
+        if filtered_df.empty:
+            continue
+
+        # Absolute IV diff
+        filtered_df["abs_diff_iv"] = (filtered_df["model_iv"] - filtered_df["market_iv"]).abs()
+        mean_abs_diff = filtered_df["abs_diff_iv"].mean()
+
+        print(f"[{date_i} | {label}] DTE ≈ {target_dte} | Mean IV Diff: {mean_abs_diff:.4f}")
+        filtered_df["abs_diff_iv"] = (filtered_df["model_iv"] - filtered_df["market_iv"]).abs()
+        mean_abs_diff_iv = filtered_df["abs_diff_iv"].mean()
+
+        # Absolute price diff
+        filtered_df["abs_diff_price"] = (filtered_df["model_price"] - (filtered_df["best_bid"]+filtered_df["best_offer"])/2).abs()
+        mean_abs_diff_price = filtered_df["abs_diff_price"].mean()
+
+        print(
+            f"[{date_i} | {label}] DTE ≈ {target_dte} | Mean IV Diff: {mean_abs_diff_iv:.4f} | Mean Price Diff: {mean_abs_diff_price:.4f}"
+        )
+        if mean_abs_diff > 0.1:
+            big_errors.append((date_i, label))
+        # === Plot ===
+        plt.figure(figsize=(8, 5))
+        plt.scatter(
+            filtered_df["log_moneyness"], filtered_df["market_iv"],
+            label='Market IV', color='blue', marker='o', s=40, alpha=0.8
+        )
+        plt.scatter(
+            filtered_df["log_moneyness"], filtered_df["model_iv"],
+            label='rBergomi IV', color='orange', marker='x', s=40, alpha=0.8
+        )
+        plt.axvline(0, color='gray', linestyle='--', alpha=0.5)
+
+        # ✳️ Fixed Y-axis scale for consistent visual comparison
+        plt.ylim(0.1, 0.6)
+        plt.yticks([0.1, 0.2, 0.3, 0.4, 0.5, 0.6])
+
+        plt.title(f"Smile Fit at DTE ≈ {target_dte} ({label}) on {date_i.date()}", fontsize=13)
+        plt.suptitle("rBergomi Smile Fit at Fixed Maturity", fontsize=10, y=0.93)
+        plt.xlabel("Log-Moneyness")
+        plt.ylabel("Implied Volatility")
+        plt.legend()
+        plt.grid(True)
+        plt.tight_layout()
+        plt.show()
+
+
+# In[40]:
+
+
+import pandas as pd
+import matplotlib.pyplot as plt
+
+skew_df = pd.DataFrame(skew_results, columns=["DTE", "Skew", "Date"])
+
+# Mean skew per DTE across dates
+mean_skew = skew_df.groupby("DTE")["Skew"].mean().reset_index()
+
+plt.figure(figsize=(10, 6))
+plt.plot(mean_skew["DTE"].values, mean_skew["Skew"].values, marker='o')
+plt.title("Term Structure of Implied Volatility Skew (Puts Only)", fontsize=14)
+plt.xlabel("Days to Expiry (DTE)")
+plt.ylabel("Skew (Slope of IV vs log-moneyness)")
+plt.axhline(0, linestyle='--', color='gray', alpha=0.6)
+plt.grid(True)
+plt.show()
