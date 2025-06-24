@@ -8,7 +8,7 @@
 
 ## rBergomi Model vs Market IV – Smile Fit Results (2023-02-01)
 
-This analysis compares the **market implied volatility (IV)** smile with model-implied IVs generated from the **rough Bergomi model**. The figures below display the smile fits and quantitative error metrics across two different maturity buckets on February 1, 2023.
+This analysis compares the **market implied volatility (IV)** smile with model-implied IVs generated from the **rough Bergomi model**. The figures in `Implied Volatility Smile Fit and Model Error Metrics.jpg` display the smile fits and quantitative error metrics across two different maturity buckets on February 1, 2023.
 
 ---
 
