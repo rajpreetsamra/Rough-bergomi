@@ -1,5 +1,5 @@
 
-# rBergomi Volatility Smile Calibration
+# rBergomi Volatility Surface Calibration
 
 This repository implements a volatility surface calibration pipeline using the rough Bergomi (rBergomi) stochastic volatility model. It includes market data preprocessing, forward variance curve simulation, implied volatility smile fitting, and visual analysis of smile fits across maturities and dates.
 
