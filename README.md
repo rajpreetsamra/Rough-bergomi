@@ -2,7 +2,7 @@
 
 This repository implements a volatility surface calibration pipeline using the rough Bergomi (rBergomi) stochastic volatility model. It includes market data preprocessing, forward variance curve simulation, implied volatility smile fitting, and visual analysis of smile fits across maturities and dates.
 
-## 📂 Project Structure
+## Project Structure
 
 ```
 .
@@ -14,7 +14,7 @@ This repository implements a volatility surface calibration pipeline using the r
 ├── results/                 # Output folder for IV smile plots and metrics
 ```
 
-## 📊 Results
+## Results
 
 The calibration framework compares **market IV** and **rBergomi-implied IV** across moneyness buckets and maturities.
 
