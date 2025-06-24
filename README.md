@@ -6,7 +6,7 @@ This repository implements a volatility surface calibration pipeline using the r
 
 ```
 .
-├── main.py                   # Entry script for end-to-end execution
+├── main.py                  # Entry script for end-to-end execution
 ├── calibration.py           # Parameter setup 
 ├── market_preprocessing.py  # Preprocessing raw options data
 ├── pricing_options.py       # Pricing using the rBergomi model
